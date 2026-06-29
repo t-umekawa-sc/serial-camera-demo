@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>製造番号カメラデモ</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <h1>製造番号カメラデモ</h1>
+      <p>赤い枠の中に製造番号を合わせて撮影してください。</p>
+    </header>
+
+    <section class="camera-card">
+      <div class="camera-wrap" id="cameraWrap">
+        <video id="video" autoplay playsinline muted></video>
+
+        <div class="overlay" aria-hidden="true">
+          <div class="guide-box">
+            <span class="guide-label">製造番号をこの枠内へ</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button id="startButton" type="button">カメラ起動</button>
+        <button id="captureButton" type="button" disabled>撮影する</button>
+        <button id="stopButton" type="button" disabled>停止</button>
+      </div>
+
+      <p id="message" class="message">「カメラ起動」を押してください。</p>
+    </section>
+
+    <section class="preview-card">
+      <h2>切り出し結果</h2>
+      <p>OCRに渡す想定の画像です。</p>
+      <canvas id="canvas"></canvas>
+      <img id="preview" alt="撮影した製造番号部分のプレビュー" />
+    </section>
+
+    <section class="note-card">
+      <h2>確認ポイント</h2>
+      <ul>
+        <li>スマホではHTTPS環境が推奨です。</li>
+        <li>GitHub Pagesに配置するとHTTPSで確認できます。</li>
+        <li>赤枠内だけを切り出すため、OCR精度を上げやすくなります。</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
