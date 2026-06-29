@@ -2,157 +2,264 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f3f4f6;
-  color: #111827;
+  width: 100%;
+  height: 100%;
+  background: #111827;
+  color: #ffffff;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+button {
+  font: inherit;
 }
 
 .app {
-  width: min(100%, 720px);
-  margin: 0 auto;
-  padding: 16px;
+  width: 100%;
+  min-height: 100vh;
+  background: #111827;
 }
 
-.header {
-  margin-bottom: 16px;
-}
-
-.header h1 {
-  margin: 0 0 8px;
-  font-size: 24px;
-}
-
-.header p {
-  margin: 0;
-  color: #4b5563;
-}
-
-.camera-card,
-.preview-card,
-.note-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-}
-
-.camera-wrap {
+.camera-screen {
   position: relative;
   width: 100%;
-  aspect-ratio: 3 / 4;
-  background: #111827;
-  border-radius: 12px;
+  height: 100svh;
   overflow: hidden;
+  background: #000000;
 }
 
-video {
+#video {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
-}
-
-.overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
 }
 
 .guide-box {
   position: absolute;
-  left: 8%;
-  top: 43%;
-  width: 84%;
-  height: 14%;
+  left: 10%;
+  top: 38%;
+  width: 80%;
+  height: 16%;
   border: 3px solid #ef4444;
   border-radius: 10px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.25);
 }
 
-.guide-box::before,
-.guide-box::after {
-  content: "";
+.guide-box span {
+  transform: translateY(-120%);
+  background: rgba(239, 68, 68, 0.95);
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.top-status {
+  position: absolute;
+  top: env(safe-area-inset-top, 0);
+  left: 0;
+  right: 0;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0));
+  font-size: 14px;
+  z-index: 5;
+}
+
+#statusText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#captureCount {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.bottom-actions {
   position: absolute;
   left: 0;
   right: 0;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.75);
+  bottom: env(safe-area-inset-bottom, 0);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+  z-index: 5;
 }
 
-.guide-box::before {
-  top: 33.33%;
-}
-
-.guide-box::after {
-  top: 66.66%;
-}
-
-.guide-label {
-  position: absolute;
-  left: 8px;
-  top: -30px;
-  background: #ef4444;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 4px 8px;
+.primary-button {
+  width: min(320px, 90vw);
+  height: 56px;
+  border: none;
   border-radius: 999px;
-}
-
-.buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-button {
-  border: 0;
-  border-radius: 10px;
-  padding: 12px 10px;
-  font-size: 15px;
-  font-weight: 700;
   background: #2563eb;
   color: #ffffff;
+  font-size: 20px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.45);
 }
 
-button:disabled {
-  background: #9ca3af;
+.primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.message {
-  min-height: 1.5em;
-  color: #374151;
+.sub-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  width: min(360px, 94vw);
 }
 
-.preview-card h2,
-.note-card h2 {
-  margin: 0 0 8px;
-  font-size: 18px;
+.secondary-button {
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.8);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.preview-card p {
-  margin: 0 0 12px;
-  color: #4b5563;
+.secondary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-canvas {
-  display: none;
+.list-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow-y: auto;
+  background: #111827;
+  padding: 16px;
 }
 
-#preview {
-  display: none;
-  width: 100%;
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.list-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.list-note {
+  margin: 0 0 16px;
+  color: #d1d5db;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.thumbnail-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.thumbnail-card {
+  background: #1f2937;
+  border: 1px solid #374151;
   border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  background: #f9fafb;
+  overflow: hidden;
 }
 
-.note-card ul {
-  margin: 8px 0 0;
-  padding-left: 20px;
-  color: #4b5563;
+.thumbnail-card img {
+  width: 100%;
+  display: block;
+  background: #000000;
+}
+
+.thumbnail-info {
+  padding: 10px;
+  font-size: 12px;
+  color: #d1d5db;
+}
+
+.thumbnail-info strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #ffffff;
+}
+
+.delete-button {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.empty-message {
+  color: #d1d5db;
+  text-align: center;
+  padding: 40px 16px;
+  border: 1px dashed #4b5563;
+  border-radius: 12px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@media (orientation: landscape) {
+  .guide-box {
+    top: 30%;
+    height: 22%;
+  }
+
+  .bottom-actions {
+    right: 16px;
+    left: auto;
+    width: 280px;
+    padding: 12px;
+    align-items: stretch;
+  }
+
+  .primary-button {
+    width: 100%;
+    height: 52px;
+    font-size: 18px;
+  }
+
+  .sub-actions {
+    width: 100%;
+  }
+
+  .secondary-button {
+    flex: 1;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
 }

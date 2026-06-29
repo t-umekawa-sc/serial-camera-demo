@@ -1,115 +1,269 @@
 const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const preview = document.getElementById("preview");
-const message = document.getElementById("message");
-const startButton = document.getElementById("startButton");
+const workCanvas = document.getElementById("workCanvas");
 const captureButton = document.getElementById("captureButton");
-const stopButton = document.getElementById("stopButton");
+const showListButton = document.getElementById("showListButton");
+const uploadButton = document.getElementById("uploadButton");
+const closeListButton = document.getElementById("closeListButton");
+const listPanel = document.getElementById("listPanel");
+const thumbnailList = document.getElementById("thumbnailList");
+const statusText = document.getElementById("statusText");
+const captureCount = document.getElementById("captureCount");
 
-let currentStream = null;
-
-function setMessage(text) {
-  message.textContent = text;
-}
-
-function setCameraButtons(isRunning) {
-  startButton.disabled = isRunning;
-  captureButton.disabled = !isRunning;
-  stopButton.disabled = !isRunning;
-}
+let capturedImages = [];
+let stream = null;
 
 async function startCamera() {
   try {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setMessage("このブラウザはカメラAPIに対応していません。");
-      return;
-    }
+    captureButton.disabled = true;
+    statusText.textContent = "カメラ起動中...";
 
-    stopCamera();
-
-    currentStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
+    stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      }
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+      },
+      audio: false,
     });
 
-    video.srcObject = currentStream;
+    video.srcObject = stream;
+
+    await new Promise((resolve) => {
+      video.onloadedmetadata = () => resolve();
+    });
+
     await video.play();
 
-    setCameraButtons(true);
-    setMessage("赤枠に製造番号を合わせて、撮影してください。");
+    captureButton.disabled = false;
+    statusText.textContent = "ガイド枠に合わせて撮影してください";
   } catch (error) {
     console.error(error);
-    setCameraButtons(false);
-
-    if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
-      setMessage("カメラを使うにはHTTPS環境が必要な場合があります。GitHub Pagesなどで開いてください。");
-      return;
-    }
-
-    if (error.name === "NotAllowedError") {
-      setMessage("カメラの使用が許可されませんでした。ブラウザの権限設定を確認してください。");
-    } else if (error.name === "NotFoundError") {
-      setMessage("利用できるカメラが見つかりませんでした。");
-    } else {
-      setMessage(`カメラ起動に失敗しました: ${error.message}`);
-    }
+    statusText.textContent = "カメラを起動できませんでした";
+    alert(
+      "カメラを起動できませんでした。\n\n" +
+        "HTTPSで開いているか、カメラの許可が有効か確認してください。",
+    );
   }
-}
-
-function stopCamera() {
-  if (currentStream) {
-    currentStream.getTracks().forEach((track) => track.stop());
-    currentStream = null;
-  }
-
-  video.srcObject = null;
-  setCameraButtons(false);
 }
 
 function captureGuideArea() {
   if (!video.videoWidth || !video.videoHeight) {
-    setMessage("カメラ映像の準備ができていません。");
+    alert("カメラ映像の準備ができていません。");
     return;
   }
 
-  const sourceWidth = video.videoWidth;
-  const sourceHeight = video.videoHeight;
+  const videoRect = video.getBoundingClientRect();
+  const guideRect = document
+    .querySelector(".guide-box")
+    .getBoundingClientRect();
 
-  // CSSのガイド枠と同じ比率
-  const guide = {
-    x: 0.08,
-    y: 0.43,
-    width: 0.84,
-    height: 0.14
-  };
+  const scaleX = video.videoWidth / videoRect.width;
+  const scaleY = video.videoHeight / videoRect.height;
 
-  const sx = Math.round(sourceWidth * guide.x);
-  const sy = Math.round(sourceHeight * guide.y);
-  const sw = Math.round(sourceWidth * guide.width);
-  const sh = Math.round(sourceHeight * guide.height);
+  const sourceX = (guideRect.left - videoRect.left) * scaleX;
+  const sourceY = (guideRect.top - videoRect.top) * scaleY;
+  const sourceWidth = guideRect.width * scaleX;
+  const sourceHeight = guideRect.height * scaleY;
 
-  canvas.width = sw;
-  canvas.height = sh;
+  workCanvas.width = Math.round(sourceWidth);
+  workCanvas.height = Math.round(sourceHeight);
 
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+  const ctx = workCanvas.getContext("2d");
 
-  const imageUrl = canvas.toDataURL("image/jpeg", 0.92);
-  preview.src = imageUrl;
-  preview.style.display = "block";
+  ctx.drawImage(
+    video,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    workCanvas.width,
+    workCanvas.height,
+  );
 
-  setMessage("赤枠内を切り出しました。次の段階で、この画像をOCRに渡します。");
+  workCanvas.toBlob(
+    (blob) => {
+      if (!blob) {
+        alert("画像の作成に失敗しました。");
+        return;
+      }
+
+      const imageUrl = URL.createObjectURL(blob);
+      const now = new Date();
+
+      capturedImages.push({
+        id: createImageId(now),
+        blob,
+        imageUrl,
+        capturedAt: now,
+      });
+
+      updateCaptureCount();
+      statusText.textContent = "撮影しました。続けて撮影できます。";
+    },
+    "image/jpeg",
+    0.9,
+  );
 }
 
-startButton.addEventListener("click", startCamera);
-captureButton.addEventListener("click", captureGuideArea);
-stopButton.addEventListener("click", () => {
-  stopCamera();
-  setMessage("カメラを停止しました。");
-});
+function createImageId(date) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mi = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  const seq = String(capturedImages.length + 1).padStart(3, "0");
 
-window.addEventListener("pagehide", stopCamera);
+  return `${yyyy}${mm}${dd}_${hh}${mi}${ss}_${seq}`;
+}
+
+function updateCaptureCount() {
+  captureCount.textContent = `撮影済み：${capturedImages.length}枚`;
+  uploadButton.disabled = capturedImages.length === 0;
+  showListButton.disabled = capturedImages.length === 0;
+}
+
+function openListPanel() {
+  renderThumbnailList();
+  listPanel.classList.remove("hidden");
+}
+
+function closeListPanel() {
+  listPanel.classList.add("hidden");
+}
+
+function renderThumbnailList() {
+  thumbnailList.innerHTML = "";
+
+  if (capturedImages.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-message";
+    empty.textContent = "撮影済み画像はありません。";
+    thumbnailList.appendChild(empty);
+    return;
+  }
+
+  capturedImages.forEach((item, index) => {
+    const card = document.createElement("div");
+    card.className = "thumbnail-card";
+
+    const img = document.createElement("img");
+    img.src = item.imageUrl;
+    img.alt = `撮影画像 ${index + 1}`;
+
+    const info = document.createElement("div");
+    info.className = "thumbnail-info";
+
+    const title = document.createElement("strong");
+    title.textContent = `${index + 1}枚目`;
+
+    const dateText = document.createElement("div");
+    dateText.textContent = formatDateTime(item.capturedAt);
+
+    const idText = document.createElement("div");
+    idText.textContent = item.id;
+
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "delete-button";
+    deleteButton.type = "button";
+    deleteButton.textContent = "削除";
+    deleteButton.addEventListener("click", () => {
+      deleteCapturedImage(item.id);
+    });
+
+    info.appendChild(title);
+    info.appendChild(dateText);
+    info.appendChild(idText);
+    info.appendChild(deleteButton);
+
+    card.appendChild(img);
+    card.appendChild(info);
+
+    thumbnailList.appendChild(card);
+  });
+}
+
+function deleteCapturedImage(id) {
+  const target = capturedImages.find((item) => item.id === id);
+
+  if (target) {
+    URL.revokeObjectURL(target.imageUrl);
+  }
+
+  capturedImages = capturedImages.filter((item) => item.id !== id);
+
+  updateCaptureCount();
+  renderThumbnailList();
+}
+
+function uploadAllImages() {
+  if (capturedImages.length === 0) {
+    alert("アップロード対象の画像がありません。");
+    return;
+  }
+
+  const formData = new FormData();
+
+  capturedImages.forEach((item, index) => {
+    formData.append("images", item.blob, `${item.id}.jpg`);
+
+    formData.append(
+      `metadata_${index}`,
+      JSON.stringify({
+        id: item.id,
+        capturedAt: item.capturedAt.toISOString(),
+      }),
+    );
+  });
+
+  console.log("アップロード用FormData", formData);
+
+  alert(
+    "デモのため、実際のアップロードは行っていません。\n\n" +
+      `${capturedImages.length}枚の画像を一括アップロードする想定です。`,
+  );
+
+  /*
+  実運用では、例えば以下のようにFastAPIへ送信します。
+
+  fetch("/api/upload-serial-images", {
+    method: "POST",
+    body: formData
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("アップロードに失敗しました");
+      }
+      return response.json();
+    })
+    .then((data) => {
+      console.log(data);
+      alert("アップロードしました");
+    })
+    .catch((error) => {
+      console.error(error);
+      alert("アップロードに失敗しました");
+    });
+  */
+}
+
+function formatDateTime(date) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mi = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+
+  return `${yyyy}/${mm}/${dd} ${hh}:${mi}:${ss}`;
+}
+
+captureButton.addEventListener("click", captureGuideArea);
+showListButton.addEventListener("click", openListPanel);
+uploadButton.addEventListener("click", uploadAllImages);
+closeListButton.addEventListener("click", closeListPanel);
+
+updateCaptureCount();
+startCamera();
