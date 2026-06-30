@@ -345,6 +345,48 @@ button {
   width: 100%;
 }
 
+.format-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.format-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.format-option:hover {
+  background: #1f2937;
+}
+
+.format-option input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex: none;
+}
+
+.format-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fmt-name {
+  color: #e5e7eb;
+  font-size: 15px;
+}
+
+.fmt-desc {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
 .empty-message {
   color: #d1d5db;
   text-align: center;

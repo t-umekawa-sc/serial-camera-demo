@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>製造番号カメラデモ</title>
-    <link rel="stylesheet" href="./style.css?v=9" />
+    <link rel="stylesheet" href="./style.css?v=10" />
   </head>
   <body>
     <main class="app">
@@ -44,6 +44,9 @@
             </button>
             <button id="readBarcodeButton" class="secondary-button" type="button">
               バーコード読取（長押し）
+            </button>
+            <button id="formatButton" class="secondary-button" type="button">
+              読取対象
             </button>
             <button id="tipsButton" class="secondary-button" type="button">
               コツ
@@ -101,10 +104,29 @@
         </div>
       </section>
 
+      <section id="formatPanel" class="tips-panel hidden">
+        <div class="tips-card">
+          <div class="list-header">
+            <h2>読取対象バーコード</h2>
+            <button id="closeFormatButton" class="secondary-button" type="button">
+              閉じる
+            </button>
+          </div>
+
+          <p class="list-note">
+            読み取る1次元バーコードの種類を選びます（複数選択可）。誤読が多いときは
+            CODABAR・ITF を外すと改善します。QRコードは「読取種別」を QR
+            に切り替えて読み取ります。
+          </p>
+
+          <div id="formatOptions" class="format-options"></div>
+        </div>
+      </section>
+
       <canvas id="workCanvas" class="hidden"></canvas>
     </main>
 
     <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-    <script src="./app.js?v=9"></script>
+    <script src="./app.js?v=10"></script>
   </body>
 </html>

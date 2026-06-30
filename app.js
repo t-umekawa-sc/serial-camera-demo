@@ -18,6 +18,10 @@ const barcodeValue = document.getElementById("barcodeValue");
 const barcodeFormat = document.getElementById("barcodeFormat");
 const readBarcodeButton = document.getElementById("readBarcodeButton");
 const scanModeButton = document.getElementById("scanModeButton");
+const formatButton = document.getElementById("formatButton");
+const formatPanel = document.getElementById("formatPanel");
+const closeFormatButton = document.getElementById("closeFormatButton");
+const formatOptions = document.getElementById("formatOptions");
 
 let capturedImages = [];
 let stream = null;
@@ -36,28 +40,60 @@ const invCanvas = document.createElement("canvas");
 const invCtx = invCanvas.getContext("2d", { willReadFrequently: true });
 const barcodeReader = new ZXing.MultiFormatReader();
 
-// 読み取りモードごとの対象フォーマット。
-// バーコード（1次元）とQR（2次元）を分けることで、近接印字されたQRに
-// 引っ張られず、狙ったコードだけを読めるようにする。
-const SCAN_FORMATS = {
-  barcode: [
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.CODE_93,
-    ZXing.BarcodeFormat.CODABAR,
-    ZXing.BarcodeFormat.ITF,
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.UPC_A,
-    ZXing.BarcodeFormat.UPC_E,
-  ],
-  qr: [
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.DATA_MATRIX,
-    ZXing.BarcodeFormat.AZTEC,
-    ZXing.BarcodeFormat.PDF_417,
-  ],
-};
+// バーコード（1次元）モードで選べる対象フォーマットの候補。
+// 利用者が必要な種類だけを選べるようにし、CODABAR・ITF のような誤読
+// （フォールスポジティブ）しやすい形式を外せるようにする。
+const BARCODE_FORMAT_OPTIONS = [
+  { key: "CODE_128", label: "CODE 128", desc: "英数字・記号／可変長（工業・物流で最多）", format: ZXing.BarcodeFormat.CODE_128 },
+  { key: "CODE_39", label: "CODE 39", desc: "英大文字＋数字／前後を * で囲む", format: ZXing.BarcodeFormat.CODE_39 },
+  { key: "CODE_93", label: "CODE 93", desc: "CODE 39 の高密度版", format: ZXing.BarcodeFormat.CODE_93 },
+  { key: "CODABAR", label: "CODABAR", desc: "数字＋記号（誤読が起きやすい）", format: ZXing.BarcodeFormat.CODABAR },
+  { key: "ITF", label: "ITF（Interleaved 2 of 5）", desc: "数字のみ・偶数桁（誤読が起きやすい）", format: ZXing.BarcodeFormat.ITF },
+  { key: "EAN_13", label: "EAN-13 / JAN-13", desc: "商品コード 13桁", format: ZXing.BarcodeFormat.EAN_13 },
+  { key: "EAN_8", label: "EAN-8 / JAN-8", desc: "商品コード 8桁", format: ZXing.BarcodeFormat.EAN_8 },
+  { key: "UPC_A", label: "UPC-A", desc: "商品コード 12桁", format: ZXing.BarcodeFormat.UPC_A },
+  { key: "UPC_E", label: "UPC-E", desc: "UPC の短縮形", format: ZXing.BarcodeFormat.UPC_E },
+];
+
+// QR（2次元）モードで読む対象。こちらは固定。
+const QR_FORMATS = [
+  ZXing.BarcodeFormat.QR_CODE,
+  ZXing.BarcodeFormat.DATA_MATRIX,
+  ZXing.BarcodeFormat.AZTEC,
+  ZXing.BarcodeFormat.PDF_417,
+];
+
+// バーコードモードで有効なフォーマット（キーの集合）。localStorageに保持。
+const BARCODE_FORMAT_STORAGE_KEY = "scanBarcodeFormats";
+const ALL_BARCODE_KEYS = BARCODE_FORMAT_OPTIONS.map((o) => o.key);
+
+function loadEnabledBarcodeKeys() {
+  try {
+    const raw = localStorage.getItem(BARCODE_FORMAT_STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw).filter((k) => ALL_BARCODE_KEYS.includes(k));
+      if (saved.length) {
+        return new Set(saved);
+      }
+    }
+  } catch (error) {
+    // 破損時は既定（全選択）にフォールバック。
+  }
+  return new Set(ALL_BARCODE_KEYS);
+}
+
+let enabledBarcodeKeys = loadEnabledBarcodeKeys();
+
+function saveEnabledBarcodeKeys() {
+  try {
+    localStorage.setItem(
+      BARCODE_FORMAT_STORAGE_KEY,
+      JSON.stringify([...enabledBarcodeKeys]),
+    );
+  } catch (error) {
+    // 保存に失敗してもアプリ動作は継続。
+  }
+}
 
 // 現在の読み取りモード（"barcode" | "qr"）。既定はバーコード。
 let scanMode = "barcode";
@@ -67,10 +103,23 @@ let scanMode = "barcode";
 //  setHints(undefined) が走り、全フォーマットに戻ってしまうため）
 let scanHints = new Map();
 
-// 現在のモードに合わせてZXingの対象フォーマットを設定する。
+// 現在のモードと選択に合わせてZXingの対象フォーマットを設定する。
 function applyScanFormats() {
+  let formats;
+  if (scanMode === "qr") {
+    formats = QR_FORMATS;
+  } else {
+    formats = BARCODE_FORMAT_OPTIONS.filter((o) =>
+      enabledBarcodeKeys.has(o.key),
+    ).map((o) => o.format);
+    // 1つも選ばれていなければ全候補で読む（無効化を防ぐ）。
+    if (formats.length === 0) {
+      formats = BARCODE_FORMAT_OPTIONS.map((o) => o.format);
+    }
+  }
+
   const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, SCAN_FORMATS[scanMode]);
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
   hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
   scanHints = hints;
   barcodeReader.setHints(hints);
@@ -86,6 +135,57 @@ function updateScanModeUI() {
     scanModeButton.textContent = isQr ? "読取種別：QR" : "読取種別：バーコード";
     scanModeButton.setAttribute("aria-pressed", String(isQr));
   }
+  if (formatButton) {
+    // 読取対象の選択はバーコードモードにのみ効くため、QR時は無効化。
+    formatButton.disabled = isQr;
+  }
+}
+
+// 読取対象バーコードのチェックリストを生成する。
+function buildFormatOptions() {
+  if (!formatOptions) {
+    return;
+  }
+  formatOptions.textContent = "";
+  for (const opt of BARCODE_FORMAT_OPTIONS) {
+    const row = document.createElement("label");
+    row.className = "format-option";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = enabledBarcodeKeys.has(opt.key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        enabledBarcodeKeys.add(opt.key);
+      } else {
+        enabledBarcodeKeys.delete(opt.key);
+      }
+      saveEnabledBarcodeKeys();
+      applyScanFormats();
+    });
+
+    const text = document.createElement("span");
+    text.className = "format-text";
+    const name = document.createElement("span");
+    name.className = "fmt-name";
+    name.textContent = opt.label;
+    const desc = document.createElement("span");
+    desc.className = "fmt-desc";
+    desc.textContent = opt.desc;
+    text.append(name, desc);
+
+    row.append(checkbox, text);
+    formatOptions.append(row);
+  }
+}
+
+function openFormatPanel() {
+  buildFormatOptions();
+  formatPanel.classList.remove("hidden");
+}
+
+function closeFormatPanel() {
+  formatPanel.classList.add("hidden");
 }
 
 // バーコード ⇄ QR を切り替える。読み取り中は切り替えない。
@@ -565,6 +665,8 @@ tipsButton.addEventListener("click", openTipsPanel);
 closeTipsButton.addEventListener("click", closeTipsPanel);
 tipsOkButton.addEventListener("click", closeTipsPanel);
 scanModeButton.addEventListener("click", toggleScanMode);
+formatButton.addEventListener("click", openFormatPanel);
+closeFormatButton.addEventListener("click", closeFormatPanel);
 
 // 押している間だけ連続スキャン。指を離す／外すと停止。
 readBarcodeButton.addEventListener("pointerdown", (event) => {
