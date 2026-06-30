@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>製造番号カメラデモ</title>
-    <link rel="stylesheet" href="./style.css?v=12" />
+    <link rel="stylesheet" href="./style.css?v=13" />
   </head>
   <body>
     <main class="app">
@@ -16,6 +16,8 @@
           <span class="start-marker"></span>
           <span class="baseline"></span>
         </div>
+
+        <div id="focusRing" class="focus-ring hidden"></div>
 
         <div class="top-status">
           <div id="statusText">カメラ準備中...</div>
@@ -93,6 +95,7 @@
             <li>先頭を赤いマークに、文字を破線（基準線）に水平に合わせる。</li>
             <li>文字が枠の高さいっぱいになるよう近づく（小さすぎない）。</li>
             <li>ピントが合うのを待ってから撮る（手ブレに注意）。</li>
+            <li>ボケるときは、画面のバーコード部分をタップしてピントを合わせる。</li>
             <li>明るい場所で撮り、テカリ・反射・影を避ける。</li>
             <li>斜めからではなく、できるだけ正面から撮る。</li>
             <li>汚れや指で文字が隠れないようにする。</li>
@@ -127,6 +130,6 @@
     </main>
 
     <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-    <script src="./app.js?v=12"></script>
+    <script src="./app.js?v=13"></script>
   </body>
 </html>

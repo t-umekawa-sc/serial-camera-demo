@@ -22,6 +22,7 @@ const formatButton = document.getElementById("formatButton");
 const formatPanel = document.getElementById("formatPanel");
 const closeFormatButton = document.getElementById("closeFormatButton");
 const formatOptions = document.getElementById("formatOptions");
+const focusRing = document.getElementById("focusRing");
 
 let capturedImages = [];
 let stream = null;
@@ -271,6 +272,86 @@ async function applyCameraEnhancements() {
     // 非対応・適用失敗時は既定動作のまま続行（読み取りには影響しない）。
     console.warn("カメラ詳細設定の適用に失敗:", error);
   }
+}
+
+// 映像上のタップ位置を、映像ソース内の正規化座標（0〜1）に変換する。
+// #video は object-fit: cover なので、はみ出してクロップされる分を補正する。
+function tapToNormalizedPoint(clientX, clientY) {
+  const rect = video.getBoundingClientRect();
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh || !rect.width || !rect.height) {
+    return null;
+  }
+
+  // cover: 要素を覆うように拡大し、中央寄せでクロップ。
+  const scale = Math.max(rect.width / vw, rect.height / vh);
+  const dispW = vw * scale;
+  const dispH = vh * scale;
+  const offsetX = (rect.width - dispW) / 2;
+  const offsetY = (rect.height - dispH) / 2;
+
+  const srcX = (clientX - rect.left - offsetX) / scale;
+  const srcY = (clientY - rect.top - offsetY) / scale;
+
+  const clamp = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  return { x: clamp(srcX / vw), y: clamp(srcY / vh) };
+}
+
+// タップ位置にピントを合わせる（対応端末のみ）。視覚フィードバックも表示。
+async function focusAtTap(event) {
+  // 映像要素上のタップのみ対象（ボタン等は通常上に重なるため届かない）。
+  showFocusRing(event.clientX, event.clientY);
+
+  const point = tapToNormalizedPoint(event.clientX, event.clientY);
+  if (!point) {
+    return;
+  }
+
+  try {
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track || typeof track.getCapabilities !== "function") {
+      return;
+    }
+    const caps = track.getCapabilities();
+
+    const constraint = { pointsOfInterest: [point] };
+    // 単発フォーカスが使えればそれを、なければ連続を指定。
+    if (Array.isArray(caps.focusMode)) {
+      if (caps.focusMode.includes("single-shot")) {
+        constraint.focusMode = "single-shot";
+      } else if (caps.focusMode.includes("continuous")) {
+        constraint.focusMode = "continuous";
+      }
+    }
+
+    await track.applyConstraints({ advanced: [constraint] });
+  } catch (error) {
+    // pointsOfInterest 非対応の端末ではフォーカス要求が失敗するが、
+    // 視覚フィードバックは出るので操作感は保てる。
+    console.warn("タップフォーカスに失敗:", error);
+  }
+}
+
+// タップ位置にフォーカス枠を一瞬表示する。
+let focusRingTimer = null;
+function showFocusRing(clientX, clientY) {
+  if (!focusRing) {
+    return;
+  }
+  const rect = video.getBoundingClientRect();
+  focusRing.style.left = `${clientX - rect.left}px`;
+  focusRing.style.top = `${clientY - rect.top}px`;
+  focusRing.classList.remove("hidden");
+  // アニメーションを毎回再生させるためリフローを挟む。
+  focusRing.classList.remove("is-active");
+  void focusRing.offsetWidth;
+  focusRing.classList.add("is-active");
+
+  clearTimeout(focusRingTimer);
+  focusRingTimer = setTimeout(() => {
+    focusRing.classList.add("hidden");
+  }, 800);
 }
 
 // ガイド枠に対応する映像内（ソース）の矩形を求める。
@@ -702,6 +783,9 @@ tipsOkButton.addEventListener("click", closeTipsPanel);
 scanModeButton.addEventListener("click", toggleScanMode);
 formatButton.addEventListener("click", openFormatPanel);
 closeFormatButton.addEventListener("click", closeFormatPanel);
+
+// 映像をタップしたらその位置にピントを合わせる（対応端末のみ）。
+video.addEventListener("click", focusAtTap);
 
 // 押している間だけ連続スキャン。指を離す／外すと停止。
 readBarcodeButton.addEventListener("pointerdown", (event) => {
