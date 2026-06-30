@@ -20,6 +20,8 @@ const readBarcodeButton = document.getElementById("readBarcodeButton");
 
 let capturedImages = [];
 let stream = null;
+let scanTimer = null;
+let scanGotResult = false;
 
 const scanCanvas = document.createElement("canvas");
 const scanCtx = scanCanvas.getContext("2d", { willReadFrequently: true });
@@ -100,9 +102,45 @@ function getGuideSourceRect() {
   };
 }
 
-function readBarcode() {
+// ボタンを押している間、ガイド枠内を連続で読み取り続ける。
+// 影で1フレーム失敗しても、押している間に読めたフレームで成功にできる。
+function startHoldScan() {
+  if (scanTimer) {
+    return;
+  }
   if (!video.videoWidth || !video.videoHeight) {
     showBarcodeError("カメラ映像の準備ができていません。");
+    return;
+  }
+
+  scanGotResult = false;
+  barcodeResult.classList.add("hidden");
+  statusText.textContent = "バーコード読み取り中…枠内にかざし続けてください";
+  readBarcodeButton.classList.add("is-scanning");
+
+  scanTimer = setInterval(scanGuideArea, 200);
+}
+
+function stopHoldScan() {
+  if (!scanTimer) {
+    return;
+  }
+
+  clearInterval(scanTimer);
+  scanTimer = null;
+  readBarcodeButton.classList.remove("is-scanning");
+
+  if (!scanGotResult) {
+    showBarcodeError(
+      "枠内のバーコードを読み取れませんでした。位置・ピント・明るさを調整し、ボタンを押したまま少しかざしてください。",
+    );
+    statusText.textContent =
+      "ガイド枠に合わせて撮影／「バーコード読み取り」で枠内を読み取り";
+  }
+}
+
+function scanGuideArea() {
+  if (scanGotResult || !video.videoWidth || !video.videoHeight) {
     return;
   }
 
@@ -126,11 +164,14 @@ function readBarcode() {
     const luminance = new ZXing.HTMLCanvasElementLuminanceSource(scanCanvas);
     const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
     const result = barcodeReader.decode(bitmap);
+
+    // 読めたら成功として連続試行を止める。
+    scanGotResult = true;
     handleBarcode(result);
+    statusText.textContent = "読み取りました。";
+    stopHoldScan();
   } catch (error) {
-    showBarcodeError(
-      "枠内のバーコードを読み取れませんでした。位置・ピント・明るさを調整して再度お試しください。",
-    );
+    // このフレームでは未検出。次のフレームで再試行する。
   } finally {
     barcodeReader.reset();
   }
@@ -375,7 +416,18 @@ closeListButton.addEventListener("click", closeListPanel);
 tipsButton.addEventListener("click", openTipsPanel);
 closeTipsButton.addEventListener("click", closeTipsPanel);
 tipsOkButton.addEventListener("click", closeTipsPanel);
-readBarcodeButton.addEventListener("click", readBarcode);
+
+// 押している間だけ連続スキャン。指を離す／外すと停止。
+readBarcodeButton.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  readBarcodeButton.setPointerCapture?.(event.pointerId);
+  startHoldScan();
+});
+readBarcodeButton.addEventListener("pointerup", stopHoldScan);
+readBarcodeButton.addEventListener("pointercancel", stopHoldScan);
+readBarcodeButton.addEventListener("contextmenu", (event) =>
+  event.preventDefault(),
+);
 
 updateCaptureCount();
 openTipsPanel();

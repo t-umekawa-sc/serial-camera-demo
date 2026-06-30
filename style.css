@@ -224,6 +224,18 @@ button {
   cursor: not-allowed;
 }
 
+#readBarcodeButton {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#readBarcodeButton.is-scanning {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
 .list-panel {
   position: fixed;
   inset: 0;
