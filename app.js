@@ -4,6 +4,10 @@ const captureButton = document.getElementById("captureButton");
 const showListButton = document.getElementById("showListButton");
 const uploadButton = document.getElementById("uploadButton");
 const closeListButton = document.getElementById("closeListButton");
+const tipsButton = document.getElementById("tipsButton");
+const closeTipsButton = document.getElementById("closeTipsButton");
+const tipsOkButton = document.getElementById("tipsOkButton");
+const tipsPanel = document.getElementById("tipsPanel");
 const listPanel = document.getElementById("listPanel");
 const thumbnailList = document.getElementById("thumbnailList");
 const statusText = document.getElementById("statusText");
@@ -132,6 +136,14 @@ function openListPanel() {
 
 function closeListPanel() {
   listPanel.classList.add("hidden");
+}
+
+function openTipsPanel() {
+  tipsPanel.classList.remove("hidden");
+}
+
+function closeTipsPanel() {
+  tipsPanel.classList.add("hidden");
 }
 
 function renderThumbnailList() {
@@ -264,6 +276,10 @@ captureButton.addEventListener("click", captureGuideArea);
 showListButton.addEventListener("click", openListPanel);
 uploadButton.addEventListener("click", uploadAllImages);
 closeListButton.addEventListener("click", closeListPanel);
+tipsButton.addEventListener("click", openTipsPanel);
+closeTipsButton.addEventListener("click", closeTipsPanel);
+tipsOkButton.addEventListener("click", closeTipsPanel);
 
 updateCaptureCount();
+openTipsPanel();
 startCamera();
