@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>製造番号カメラデモ</title>
-    <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./style.css?v=2" />
   </head>
   <body>
     <main class="app">
@@ -20,6 +20,12 @@
         <div class="top-status">
           <div id="statusText">カメラ準備中...</div>
           <div id="captureCount">撮影済み：0枚</div>
+        </div>
+
+        <div id="barcodeResult" class="barcode-result hidden">
+          <span class="barcode-label">バーコード読取</span>
+          <span id="barcodeValue" class="barcode-value"></span>
+          <span id="barcodeFormat" class="barcode-format"></span>
         </div>
 
         <div class="bottom-actions">
@@ -87,6 +93,7 @@
       <canvas id="workCanvas" class="hidden"></canvas>
     </main>
 
-    <script src="./app.js"></script>
+    <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+    <script src="./app.js?v=2"></script>
   </body>
 </html>

@@ -12,34 +12,42 @@ const listPanel = document.getElementById("listPanel");
 const thumbnailList = document.getElementById("thumbnailList");
 const statusText = document.getElementById("statusText");
 const captureCount = document.getElementById("captureCount");
+const barcodeResult = document.getElementById("barcodeResult");
+const barcodeValue = document.getElementById("barcodeValue");
+const barcodeFormat = document.getElementById("barcodeFormat");
 
 let capturedImages = [];
-let stream = null;
+let lastBarcode = "";
+let lastBarcodeAt = 0;
+const codeReader = new ZXing.BrowserMultiFormatReader();
 
 async function startCamera() {
   try {
     captureButton.disabled = true;
     statusText.textContent = "カメラ起動中...";
 
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
+    // ZXingがカメラの起動と連続スキャンの両方を担当する。
+    // 同じ <video> に映像を流すため、ガイド枠の切り出しもそのまま動作する。
+    await codeReader.decodeFromConstraints(
+      {
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
       },
-      audio: false,
-    });
-
-    video.srcObject = stream;
-
-    await new Promise((resolve) => {
-      video.onloadedmetadata = () => resolve();
-    });
-
-    await video.play();
+      video,
+      (result, error) => {
+        // result が無い場合は「このフレームでは未検出」なので何もしない。
+        if (result) {
+          handleBarcode(result);
+        }
+      },
+    );
 
     captureButton.disabled = false;
-    statusText.textContent = "ガイド枠に合わせて撮影してください";
+    statusText.textContent = "ガイド枠に合わせて撮影／バーコードは自動で読み取ります";
   } catch (error) {
     console.error(error);
     statusText.textContent = "カメラを起動できませんでした";
@@ -47,6 +55,27 @@ async function startCamera() {
       "カメラを起動できませんでした。\n\n" +
         "HTTPSで開いているか、カメラの許可が有効か確認してください。",
     );
+  }
+}
+
+function handleBarcode(result) {
+  const text = result.getText();
+  const now = Date.now();
+
+  // 連続スキャンでは同じコードが何度も来るため、同一値の連投は抑制する。
+  if (text === lastBarcode && now - lastBarcodeAt < 1500) {
+    return;
+  }
+
+  lastBarcode = text;
+  lastBarcodeAt = now;
+
+  barcodeValue.textContent = text;
+  barcodeFormat.textContent = ZXing.BarcodeFormat[result.getBarcodeFormat()] || "";
+  barcodeResult.classList.remove("hidden");
+
+  if (navigator.vibrate) {
+    navigator.vibrate(80);
   }
 }
 

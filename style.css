@@ -126,6 +126,44 @@ button {
   font-weight: 700;
 }
 
+.barcode-result {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0) + 48px);
+  left: 16px;
+  right: 16px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: rgba(22, 163, 74, 0.92);
+  color: #ffffff;
+  border-radius: 12px;
+  font-size: 15px;
+  z-index: 6;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.barcode-label {
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.barcode-value {
+  font-weight: 800;
+  word-break: break-all;
+}
+
+.barcode-format {
+  font-size: 12px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
 .bottom-actions {
   position: absolute;
   left: 0;
