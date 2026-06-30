@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>製造番号カメラデモ</title>
-    <link rel="stylesheet" href="./style.css?v=3" />
+    <link rel="stylesheet" href="./style.css?v=4" />
   </head>
   <body>
     <main class="app">
@@ -23,7 +23,7 @@
         </div>
 
         <div id="barcodeResult" class="barcode-result hidden">
-          <span class="barcode-label">バーコード読取</span>
+          <span id="barcodeLabel" class="barcode-label">バーコード読取</span>
           <span id="barcodeValue" class="barcode-value"></span>
           <span id="barcodeFormat" class="barcode-format"></span>
         </div>
@@ -34,8 +34,8 @@
           </button>
 
           <div class="sub-actions">
-            <button id="barcodeToggle" class="secondary-button" type="button">
-              バーコード：ON
+            <button id="readBarcodeButton" class="secondary-button" type="button">
+              バーコード読み取り
             </button>
             <button id="tipsButton" class="secondary-button" type="button">
               コツ
@@ -97,6 +97,6 @@
     </main>
 
     <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-    <script src="./app.js?v=3"></script>
+    <script src="./app.js?v=4"></script>
   </body>
 </html>

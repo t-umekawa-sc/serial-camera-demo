@@ -13,19 +13,13 @@ const thumbnailList = document.getElementById("thumbnailList");
 const statusText = document.getElementById("statusText");
 const captureCount = document.getElementById("captureCount");
 const barcodeResult = document.getElementById("barcodeResult");
+const barcodeLabel = document.getElementById("barcodeLabel");
 const barcodeValue = document.getElementById("barcodeValue");
 const barcodeFormat = document.getElementById("barcodeFormat");
-const barcodeToggle = document.getElementById("barcodeToggle");
+const readBarcodeButton = document.getElementById("readBarcodeButton");
 
 let capturedImages = [];
 let stream = null;
-let lastBarcode = "";
-let lastBarcodeAt = 0;
-
-// バーコード読み取りはカメラとは独立して動かす。
-// カメラの起動・停止は自前で管理し、スキャンだけをON/OFFできるようにする。
-let barcodeEnabled = true;
-let scanTimer = null;
 
 const scanCanvas = document.createElement("canvas");
 const scanCtx = scanCanvas.getContext("2d", { willReadFrequently: true });
@@ -55,6 +49,7 @@ const barcodeReader = new ZXing.MultiFormatReader();
 async function startCamera() {
   try {
     captureButton.disabled = true;
+    readBarcodeButton.disabled = true;
     statusText.textContent = "カメラ起動中...";
 
     stream = await navigator.mediaDevices.getUserMedia({
@@ -75,11 +70,9 @@ async function startCamera() {
     await video.play();
 
     captureButton.disabled = false;
-    updateStatusForBarcode();
-
-    if (barcodeEnabled) {
-      startBarcodeScan();
-    }
+    readBarcodeButton.disabled = false;
+    statusText.textContent =
+      "ガイド枠に合わせて撮影／「バーコード読み取り」で枠内を読み取り";
   } catch (error) {
     console.error(error);
     statusText.textContent = "カメラを起動できませんでした";
@@ -90,91 +83,78 @@ async function startCamera() {
   }
 }
 
-function updateStatusForBarcode() {
-  statusText.textContent = barcodeEnabled
-    ? "ガイド枠に合わせて撮影／バーコードは自動で読み取ります"
-    : "ガイド枠に合わせて撮影してください";
+// ガイド枠に対応する映像内（ソース）の矩形を求める。
+// 撮影とバーコード読み取りで同じ範囲を切り出すために共通化している。
+function getGuideSourceRect() {
+  const videoRect = video.getBoundingClientRect();
+  const guideRect = document.querySelector(".guide-box").getBoundingClientRect();
+
+  const scaleX = video.videoWidth / videoRect.width;
+  const scaleY = video.videoHeight / videoRect.height;
+
+  return {
+    x: (guideRect.left - videoRect.left) * scaleX,
+    y: (guideRect.top - videoRect.top) * scaleY,
+    width: guideRect.width * scaleX,
+    height: guideRect.height * scaleY,
+  };
 }
 
-function startBarcodeScan() {
-  if (scanTimer) {
-    return;
-  }
-  scanTimer = setInterval(scanFrame, 250);
-}
-
-function stopBarcodeScan() {
-  if (scanTimer) {
-    clearInterval(scanTimer);
-    scanTimer = null;
-  }
-}
-
-function scanFrame() {
+function readBarcode() {
   if (!video.videoWidth || !video.videoHeight) {
+    showBarcodeError("カメラ映像の準備ができていません。");
     return;
   }
 
-  // 解析負荷を抑えるため、最大幅1280に縮小したフレームで読み取る。
-  const maxWidth = 1280;
-  const scale = Math.min(1, maxWidth / video.videoWidth);
-  scanCanvas.width = Math.round(video.videoWidth * scale);
-  scanCanvas.height = Math.round(video.videoHeight * scale);
-  scanCtx.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+  // ガイド枠内だけを切り出して解析する。
+  const rect = getGuideSourceRect();
+  scanCanvas.width = Math.round(rect.width);
+  scanCanvas.height = Math.round(rect.height);
+  scanCtx.drawImage(
+    video,
+    rect.x,
+    rect.y,
+    rect.width,
+    rect.height,
+    0,
+    0,
+    scanCanvas.width,
+    scanCanvas.height,
+  );
 
   try {
     const luminance = new ZXing.HTMLCanvasElementLuminanceSource(scanCanvas);
     const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
     const result = barcodeReader.decode(bitmap);
-    if (result) {
-      handleBarcode(result);
-    }
+    handleBarcode(result);
   } catch (error) {
-    // このフレームでは未検出（NotFoundException等）。無視する。
+    showBarcodeError(
+      "枠内のバーコードを読み取れませんでした。位置・ピント・明るさを調整して再度お試しください。",
+    );
   } finally {
     barcodeReader.reset();
   }
 }
 
-function setBarcodeEnabled(enabled) {
-  barcodeEnabled = enabled;
-
-  if (enabled) {
-    barcodeToggle.textContent = "バーコード：ON";
-    barcodeToggle.classList.remove("is-off");
-    if (video.srcObject) {
-      startBarcodeScan();
-    }
-  } else {
-    barcodeToggle.textContent = "バーコード：OFF";
-    barcodeToggle.classList.add("is-off");
-    stopBarcodeScan();
-    barcodeResult.classList.add("hidden");
-    lastBarcode = "";
-  }
-
-  updateStatusForBarcode();
-}
-
 function handleBarcode(result) {
-  const text = result.getText();
-  const now = Date.now();
-
-  // 連続スキャンでは同じコードが何度も来るため、同一値の連投は抑制する。
-  if (text === lastBarcode && now - lastBarcodeAt < 1500) {
-    return;
-  }
-
-  lastBarcode = text;
-  lastBarcodeAt = now;
-
-  barcodeValue.textContent = text;
-  barcodeFormat.textContent = ZXing.BarcodeFormat[result.getBarcodeFormat()] || "";
+  barcodeResult.classList.remove("is-error");
+  barcodeLabel.textContent = "バーコード読取";
+  barcodeValue.textContent = result.getText();
+  barcodeFormat.textContent =
+    ZXing.BarcodeFormat[result.getBarcodeFormat()] || "";
   barcodeResult.classList.remove("hidden");
 
   if (navigator.vibrate) {
     navigator.vibrate(80);
   }
+}
+
+function showBarcodeError(message) {
+  barcodeResult.classList.add("is-error");
+  barcodeLabel.textContent = "読み取り失敗";
+  barcodeValue.textContent = message;
+  barcodeFormat.textContent = "";
+  barcodeResult.classList.remove("hidden");
 }
 
 function captureGuideArea() {
@@ -183,30 +163,19 @@ function captureGuideArea() {
     return;
   }
 
-  const videoRect = video.getBoundingClientRect();
-  const guideRect = document
-    .querySelector(".guide-box")
-    .getBoundingClientRect();
+  const rect = getGuideSourceRect();
 
-  const scaleX = video.videoWidth / videoRect.width;
-  const scaleY = video.videoHeight / videoRect.height;
-
-  const sourceX = (guideRect.left - videoRect.left) * scaleX;
-  const sourceY = (guideRect.top - videoRect.top) * scaleY;
-  const sourceWidth = guideRect.width * scaleX;
-  const sourceHeight = guideRect.height * scaleY;
-
-  workCanvas.width = Math.round(sourceWidth);
-  workCanvas.height = Math.round(sourceHeight);
+  workCanvas.width = Math.round(rect.width);
+  workCanvas.height = Math.round(rect.height);
 
   const ctx = workCanvas.getContext("2d");
 
   ctx.drawImage(
     video,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
+    rect.x,
+    rect.y,
+    rect.width,
+    rect.height,
     0,
     0,
     workCanvas.width,
@@ -406,9 +375,8 @@ closeListButton.addEventListener("click", closeListPanel);
 tipsButton.addEventListener("click", openTipsPanel);
 closeTipsButton.addEventListener("click", closeTipsPanel);
 tipsOkButton.addEventListener("click", closeTipsPanel);
-barcodeToggle.addEventListener("click", () => setBarcodeEnabled(!barcodeEnabled));
+readBarcodeButton.addEventListener("click", readBarcode);
 
 updateCaptureCount();
-setBarcodeEnabled(barcodeEnabled);
 openTipsPanel();
 startCamera();
