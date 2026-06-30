@@ -25,6 +25,11 @@ let scanGotResult = false;
 
 const scanCanvas = document.createElement("canvas");
 const scanCtx = scanCanvas.getContext("2d", { willReadFrequently: true });
+// 影補正の出力用と、背景（照明ムラ）推定用の作業キャンバス。
+const procCanvas = document.createElement("canvas");
+const procCtx = procCanvas.getContext("2d", { willReadFrequently: true });
+const bgCanvas = document.createElement("canvas");
+const bgCtx = bgCanvas.getContext("2d", { willReadFrequently: true });
 const barcodeReader = new ZXing.MultiFormatReader();
 
 (function configureBarcodeReader() {
@@ -144,7 +149,7 @@ function scanGuideArea() {
     return;
   }
 
-  // ガイド枠内だけを切り出して解析する。
+  // ガイド枠内だけを切り出す。
   const rect = getGuideSourceRect();
   scanCanvas.width = Math.round(rect.width);
   scanCanvas.height = Math.round(rect.height);
@@ -160,21 +165,84 @@ function scanGuideArea() {
     scanCanvas.height,
   );
 
-  try {
-    const luminance = new ZXing.HTMLCanvasElementLuminanceSource(scanCanvas);
-    const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
-    const result = barcodeReader.decode(bitmap);
+  // まず素の画像で読み、ダメなときだけ影補正をかけて再試行する。
+  let result = tryDecode(scanCanvas);
+  if (!result) {
+    const corrected = buildShadowCorrectedCanvas();
+    if (corrected) {
+      result = tryDecode(corrected);
+    }
+  }
 
+  if (result) {
     // 読めたら成功として連続試行を止める。
     scanGotResult = true;
     handleBarcode(result);
     statusText.textContent = "読み取りました。";
     stopHoldScan();
+  }
+}
+
+// 1枚のキャンバスをZXingで解析する。未検出なら null。
+function tryDecode(canvas) {
+  try {
+    const luminance = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+    const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
+    return barcodeReader.decode(bitmap);
   } catch (error) {
-    // このフレームでは未検出。次のフレームで再試行する。
+    return null;
   } finally {
     barcodeReader.reset();
   }
+}
+
+// 影補正：背景の明るさ分布で割って照明ムラを平坦化し、軽くコントラストを強調する。
+function buildShadowCorrectedCanvas() {
+  const w = scanCanvas.width;
+  const h = scanCanvas.height;
+  if (!w || !h) {
+    return null;
+  }
+
+  const src = scanCtx.getImageData(0, 0, w, h);
+  const data = src.data;
+
+  // 縮小描画で背景（照明ムラ）をぼかして推定する。
+  const bw = Math.max(8, Math.min(48, Math.round(w / 12)));
+  const bh = Math.max(8, Math.min(48, Math.round(h / 12)));
+  bgCanvas.width = bw;
+  bgCanvas.height = bh;
+  bgCtx.imageSmoothingEnabled = true;
+  bgCtx.drawImage(scanCanvas, 0, 0, w, h, 0, 0, bw, bh);
+  const bg = bgCtx.getImageData(0, 0, bw, bh).data;
+
+  procCanvas.width = w;
+  procCanvas.height = h;
+  const out = procCtx.createImageData(w, h);
+  const outData = out.data;
+
+  for (let y = 0; y < h; y++) {
+    const byRow = Math.min(bh - 1, ((y * bh) / h) | 0) * bw;
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+
+      const bi = (byRow + Math.min(bw - 1, ((x * bw) / w) | 0)) * 4;
+      const bgGray =
+        bg[bi] * 0.299 + bg[bi + 1] * 0.587 + bg[bi + 2] * 0.114 || 1;
+
+      // 照明ムラ補正（背景で割って平坦化）＋軽いコントラスト強調。
+      let v = (gray * 128) / bgGray;
+      v = (v - 128) * 1.4 + 128;
+      v = v < 0 ? 0 : v > 255 ? 255 : v;
+
+      outData[i] = outData[i + 1] = outData[i + 2] = v;
+      outData[i + 3] = 255;
+    }
+  }
+
+  procCtx.putImageData(out, 0, 0);
+  return procCanvas;
 }
 
 function handleBarcode(result) {
