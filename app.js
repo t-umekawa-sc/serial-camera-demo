@@ -66,6 +66,11 @@ const QR_FORMATS = [
 // バーコードモードで有効なフォーマット（キーの集合）。localStorageに保持。
 const BARCODE_FORMAT_STORAGE_KEY = "scanBarcodeFormats";
 const ALL_BARCODE_KEYS = BARCODE_FORMAT_OPTIONS.map((o) => o.key);
+// 既定の有効フォーマット。誤読（フォールスポジティブ）が多い CODABAR・ITF
+// は初期状態では外しておく（必要なら「読取対象」でONにできる）。
+const DEFAULT_BARCODE_KEYS = ALL_BARCODE_KEYS.filter(
+  (k) => k !== "CODABAR" && k !== "ITF",
+);
 
 function loadEnabledBarcodeKeys() {
   try {
@@ -77,9 +82,9 @@ function loadEnabledBarcodeKeys() {
       }
     }
   } catch (error) {
-    // 破損時は既定（全選択）にフォールバック。
+    // 破損時は既定にフォールバック。
   }
-  return new Set(ALL_BARCODE_KEYS);
+  return new Set(DEFAULT_BARCODE_KEYS);
 }
 
 let enabledBarcodeKeys = loadEnabledBarcodeKeys();
