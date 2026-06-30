@@ -30,6 +30,9 @@ const procCanvas = document.createElement("canvas");
 const procCtx = procCanvas.getContext("2d", { willReadFrequently: true });
 const bgCanvas = document.createElement("canvas");
 const bgCtx = bgCanvas.getContext("2d", { willReadFrequently: true });
+// 反転（ネガ）画像の出力用。
+const invCanvas = document.createElement("canvas");
+const invCtx = invCanvas.getContext("2d", { willReadFrequently: true });
 const barcodeReader = new ZXing.MultiFormatReader();
 
 (function configureBarcodeReader() {
@@ -165,12 +168,19 @@ function scanGuideArea() {
     scanCanvas.height,
   );
 
-  // まず素の画像で読み、ダメなときだけ影補正をかけて再試行する。
+  // 素 → 影補正 → 反転（ネガ）の順に、読めるまで試す。
   let result = tryDecode(scanCanvas);
   if (!result) {
     const corrected = buildShadowCorrectedCanvas();
     if (corrected) {
       result = tryDecode(corrected);
+    }
+    if (!result) {
+      // 黒地に白バー等の反転印字に備えて、ネガ画像でも試す。
+      const inverted = buildInvertedCanvas(corrected || scanCanvas);
+      if (inverted) {
+        result = tryDecode(inverted);
+      }
     }
   }
 
@@ -243,6 +253,28 @@ function buildShadowCorrectedCanvas() {
 
   procCtx.putImageData(out, 0, 0);
   return procCanvas;
+}
+
+// 反転（ネガ）画像を作る。元のキャンバスは変更しない。
+function buildInvertedCanvas(sourceCanvas) {
+  const w = sourceCanvas.width;
+  const h = sourceCanvas.height;
+  if (!w || !h) {
+    return null;
+  }
+
+  const img = sourceCanvas.getContext("2d").getImageData(0, 0, w, h);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const gray = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    const v = 255 - gray;
+    d[i] = d[i + 1] = d[i + 2] = v;
+  }
+
+  invCanvas.width = w;
+  invCanvas.height = h;
+  invCtx.putImageData(img, 0, 0);
+  return invCanvas;
 }
 
 function handleBarcode(result) {
