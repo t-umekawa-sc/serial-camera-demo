@@ -62,11 +62,17 @@ const SCAN_FORMATS = {
 // 現在の読み取りモード（"barcode" | "qr"）。既定はバーコード。
 let scanMode = "barcode";
 
+// 現在の読み取りヒント。decode() 呼び出し時に毎回渡す必要がある。
+// （ZXingの MultiFormatReader.decode(image) を引数なしで呼ぶと内部で
+//  setHints(undefined) が走り、全フォーマットに戻ってしまうため）
+let scanHints = new Map();
+
 // 現在のモードに合わせてZXingの対象フォーマットを設定する。
 function applyScanFormats() {
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, SCAN_FORMATS[scanMode]);
   hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  scanHints = hints;
   barcodeReader.setHints(hints);
 }
 
@@ -239,7 +245,8 @@ function tryDecode(canvas) {
   try {
     const luminance = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
     const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
-    return barcodeReader.decode(bitmap);
+    // ヒントを毎回渡してモードのフォーマット制限を効かせる（QR混入防止）。
+    return barcodeReader.decode(bitmap, scanHints);
   } catch (error) {
     return null;
   } finally {
