@@ -49,15 +49,16 @@ button {
   height: 16%;
   border: 3px solid #ef4444;
   border-radius: 10px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
   pointer-events: none;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.25);
 }
 
-.guide-box span {
-  transform: translateY(-120%);
+/* 枠の上に出す説明ラベル */
+.guide-label {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -120%);
   background: rgba(239, 68, 68, 0.95);
   color: #ffffff;
   padding: 6px 12px;
@@ -65,6 +66,37 @@ button {
   font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* 先頭文字を合わせる開始マーカー（左端から少し内側にインセット） */
+.start-marker {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 8%;
+  width: 3px;
+  background: #ef4444;
+}
+
+.start-marker::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  transform: translateY(-50%);
+  border-style: solid;
+  border-width: 7px 0 7px 9px;
+  border-color: transparent transparent transparent #ef4444;
+}
+
+/* 傾き防止の水平基準線 */
+.baseline {
+  position: absolute;
+  left: 8%;
+  right: 4%;
+  top: 50%;
+  height: 0;
+  border-top: 1px dashed rgba(255, 255, 255, 0.7);
 }
 
 .top-status {
