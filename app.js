@@ -215,8 +215,10 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
+        // 密度の高いバーコード（CODE 128 等）で細いバーに十分なピクセルを
+        // 乗せるため、できるだけ高い解像度を要求する（取得可否は端末依存）。
+        width: { ideal: 2560 },
+        height: { ideal: 1440 },
       },
       audio: false,
     });
@@ -229,6 +231,9 @@ async function startCamera() {
 
     await video.play();
 
+    // 連続オートフォーカス等を可能なら適用（対応端末のみ）。
+    await applyCameraEnhancements();
+
     captureButton.disabled = false;
     readBarcodeButton.disabled = false;
     statusText.textContent =
@@ -240,6 +245,31 @@ async function startCamera() {
       "カメラを起動できませんでした。\n\n" +
         "HTTPSで開いているか、カメラの許可が有効か確認してください。",
     );
+  }
+}
+
+// 端末が対応していれば連続オートフォーカスを要求し、ピントが合いやすくする。
+// （MediaTrack の focusMode は対応端末が限られるため、可否を確認して適用）
+async function applyCameraEnhancements() {
+  try {
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track || typeof track.getCapabilities !== "function") {
+      return;
+    }
+    const caps = track.getCapabilities();
+    const advanced = [];
+
+    // 連続オートフォーカス（対応していれば）。
+    if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) {
+      advanced.push({ focusMode: "continuous" });
+    }
+
+    if (advanced.length) {
+      await track.applyConstraints({ advanced });
+    }
+  } catch (error) {
+    // 非対応・適用失敗時は既定動作のまま続行（読み取りには影響しない）。
+    console.warn("カメラ詳細設定の適用に失敗:", error);
   }
 }
 
