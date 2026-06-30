@@ -198,9 +198,16 @@ button {
 
 .sub-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
   width: min(360px, 94vw);
+}
+
+#barcodeToggle.is-off {
+  background: rgba(75, 85, 99, 0.85);
+  border-color: rgba(255, 255, 255, 0.25);
+  opacity: 0.85;
 }
 
 .secondary-button {

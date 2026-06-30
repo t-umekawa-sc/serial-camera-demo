@@ -15,39 +15,71 @@ const captureCount = document.getElementById("captureCount");
 const barcodeResult = document.getElementById("barcodeResult");
 const barcodeValue = document.getElementById("barcodeValue");
 const barcodeFormat = document.getElementById("barcodeFormat");
+const barcodeToggle = document.getElementById("barcodeToggle");
 
 let capturedImages = [];
+let stream = null;
 let lastBarcode = "";
 let lastBarcodeAt = 0;
-const codeReader = new ZXing.BrowserMultiFormatReader();
+
+// バーコード読み取りはカメラとは独立して動かす。
+// カメラの起動・停止は自前で管理し、スキャンだけをON/OFFできるようにする。
+let barcodeEnabled = true;
+let scanTimer = null;
+
+const scanCanvas = document.createElement("canvas");
+const scanCtx = scanCanvas.getContext("2d", { willReadFrequently: true });
+const barcodeReader = new ZXing.MultiFormatReader();
+
+(function configureBarcodeReader() {
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.QR_CODE,
+    ZXing.BarcodeFormat.DATA_MATRIX,
+    ZXing.BarcodeFormat.AZTEC,
+    ZXing.BarcodeFormat.PDF_417,
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.CODE_93,
+    ZXing.BarcodeFormat.CODABAR,
+    ZXing.BarcodeFormat.ITF,
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.UPC_A,
+    ZXing.BarcodeFormat.UPC_E,
+  ]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  barcodeReader.setHints(hints);
+})();
 
 async function startCamera() {
   try {
     captureButton.disabled = true;
     statusText.textContent = "カメラ起動中...";
 
-    // ZXingがカメラの起動と連続スキャンの両方を担当する。
-    // 同じ <video> に映像を流すため、ガイド枠の切り出しもそのまま動作する。
-    await codeReader.decodeFromConstraints(
-      {
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
       },
-      video,
-      (result, error) => {
-        // result が無い場合は「このフレームでは未検出」なので何もしない。
-        if (result) {
-          handleBarcode(result);
-        }
-      },
-    );
+      audio: false,
+    });
+
+    video.srcObject = stream;
+
+    await new Promise((resolve) => {
+      video.onloadedmetadata = () => resolve();
+    });
+
+    await video.play();
 
     captureButton.disabled = false;
-    statusText.textContent = "ガイド枠に合わせて撮影／バーコードは自動で読み取ります";
+    updateStatusForBarcode();
+
+    if (barcodeEnabled) {
+      startBarcodeScan();
+    }
   } catch (error) {
     console.error(error);
     statusText.textContent = "カメラを起動できませんでした";
@@ -56,6 +88,72 @@ async function startCamera() {
         "HTTPSで開いているか、カメラの許可が有効か確認してください。",
     );
   }
+}
+
+function updateStatusForBarcode() {
+  statusText.textContent = barcodeEnabled
+    ? "ガイド枠に合わせて撮影／バーコードは自動で読み取ります"
+    : "ガイド枠に合わせて撮影してください";
+}
+
+function startBarcodeScan() {
+  if (scanTimer) {
+    return;
+  }
+  scanTimer = setInterval(scanFrame, 250);
+}
+
+function stopBarcodeScan() {
+  if (scanTimer) {
+    clearInterval(scanTimer);
+    scanTimer = null;
+  }
+}
+
+function scanFrame() {
+  if (!video.videoWidth || !video.videoHeight) {
+    return;
+  }
+
+  // 解析負荷を抑えるため、最大幅1280に縮小したフレームで読み取る。
+  const maxWidth = 1280;
+  const scale = Math.min(1, maxWidth / video.videoWidth);
+  scanCanvas.width = Math.round(video.videoWidth * scale);
+  scanCanvas.height = Math.round(video.videoHeight * scale);
+  scanCtx.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+
+  try {
+    const luminance = new ZXing.HTMLCanvasElementLuminanceSource(scanCanvas);
+    const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
+    const result = barcodeReader.decode(bitmap);
+    if (result) {
+      handleBarcode(result);
+    }
+  } catch (error) {
+    // このフレームでは未検出（NotFoundException等）。無視する。
+  } finally {
+    barcodeReader.reset();
+  }
+}
+
+function setBarcodeEnabled(enabled) {
+  barcodeEnabled = enabled;
+
+  if (enabled) {
+    barcodeToggle.textContent = "バーコード：ON";
+    barcodeToggle.classList.remove("is-off");
+    if (video.srcObject) {
+      startBarcodeScan();
+    }
+  } else {
+    barcodeToggle.textContent = "バーコード：OFF";
+    barcodeToggle.classList.add("is-off");
+    stopBarcodeScan();
+    barcodeResult.classList.add("hidden");
+    lastBarcode = "";
+  }
+
+  updateStatusForBarcode();
 }
 
 function handleBarcode(result) {
@@ -308,7 +406,9 @@ closeListButton.addEventListener("click", closeListPanel);
 tipsButton.addEventListener("click", openTipsPanel);
 closeTipsButton.addEventListener("click", closeTipsPanel);
 tipsOkButton.addEventListener("click", closeTipsPanel);
+barcodeToggle.addEventListener("click", () => setBarcodeEnabled(!barcodeEnabled));
 
 updateCaptureCount();
+setBarcodeEnabled(barcodeEnabled);
 openTipsPanel();
 startCamera();
