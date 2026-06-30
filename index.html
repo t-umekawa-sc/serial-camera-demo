@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>製造番号カメラデモ</title>
-    <link rel="stylesheet" href="./style.css?v=7" />
+    <link rel="stylesheet" href="./style.css?v=8" />
   </head>
   <body>
     <main class="app">
@@ -34,6 +34,14 @@
           </button>
 
           <div class="sub-actions">
+            <button
+              id="scanModeButton"
+              class="secondary-button"
+              type="button"
+              aria-pressed="false"
+            >
+              読取種別：バーコード
+            </button>
             <button id="readBarcodeButton" class="secondary-button" type="button">
               バーコード読取（長押し）
             </button>
@@ -97,6 +105,6 @@
     </main>
 
     <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-    <script src="./app.js?v=7"></script>
+    <script src="./app.js?v=8"></script>
   </body>
 </html>

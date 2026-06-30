@@ -17,6 +17,7 @@ const barcodeLabel = document.getElementById("barcodeLabel");
 const barcodeValue = document.getElementById("barcodeValue");
 const barcodeFormat = document.getElementById("barcodeFormat");
 const readBarcodeButton = document.getElementById("readBarcodeButton");
+const scanModeButton = document.getElementById("scanModeButton");
 
 let capturedImages = [];
 let stream = null;
@@ -35,13 +36,11 @@ const invCanvas = document.createElement("canvas");
 const invCtx = invCanvas.getContext("2d", { willReadFrequently: true });
 const barcodeReader = new ZXing.MultiFormatReader();
 
-(function configureBarcodeReader() {
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.DATA_MATRIX,
-    ZXing.BarcodeFormat.AZTEC,
-    ZXing.BarcodeFormat.PDF_417,
+// 読み取りモードごとの対象フォーマット。
+// バーコード（1次元）とQR（2次元）を分けることで、近接印字されたQRに
+// 引っ張られず、狙ったコードだけを読めるようにする。
+const SCAN_FORMATS = {
+  barcode: [
     ZXing.BarcodeFormat.CODE_128,
     ZXing.BarcodeFormat.CODE_39,
     ZXing.BarcodeFormat.CODE_93,
@@ -51,10 +50,50 @@ const barcodeReader = new ZXing.MultiFormatReader();
     ZXing.BarcodeFormat.EAN_8,
     ZXing.BarcodeFormat.UPC_A,
     ZXing.BarcodeFormat.UPC_E,
-  ]);
+  ],
+  qr: [
+    ZXing.BarcodeFormat.QR_CODE,
+    ZXing.BarcodeFormat.DATA_MATRIX,
+    ZXing.BarcodeFormat.AZTEC,
+    ZXing.BarcodeFormat.PDF_417,
+  ],
+};
+
+// 現在の読み取りモード（"barcode" | "qr"）。既定はバーコード。
+let scanMode = "barcode";
+
+// 現在のモードに合わせてZXingの対象フォーマットを設定する。
+function applyScanFormats() {
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, SCAN_FORMATS[scanMode]);
   hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
   barcodeReader.setHints(hints);
-})();
+}
+
+applyScanFormats();
+
+// モードに応じてボタン表示を更新する。
+function updateScanModeUI() {
+  const isQr = scanMode === "qr";
+  readBarcodeButton.textContent = isQr ? "QR読取（長押し）" : "バーコード読取（長押し）";
+  if (scanModeButton) {
+    scanModeButton.textContent = isQr ? "読取種別：QR" : "読取種別：バーコード";
+    scanModeButton.setAttribute("aria-pressed", String(isQr));
+  }
+}
+
+// バーコード ⇄ QR を切り替える。読み取り中は切り替えない。
+function toggleScanMode() {
+  if (scanTimer) {
+    return;
+  }
+  scanMode = scanMode === "barcode" ? "qr" : "barcode";
+  applyScanFormats();
+  updateScanModeUI();
+  barcodeResult.classList.add("hidden");
+}
+
+updateScanModeUI();
 
 async function startCamera() {
   try {
@@ -123,7 +162,8 @@ function startHoldScan() {
 
   scanGotResult = false;
   barcodeResult.classList.add("hidden");
-  statusText.textContent = "バーコード読み取り中…枠内にかざし続けてください";
+  const codeName = scanMode === "qr" ? "QR" : "バーコード";
+  statusText.textContent = `${codeName}読み取り中…枠内にかざし続けてください`;
   readBarcodeButton.classList.add("is-scanning");
 
   scanTimer = setInterval(scanGuideArea, 200);
@@ -139,8 +179,9 @@ function stopHoldScan() {
   readBarcodeButton.classList.remove("is-scanning");
 
   if (!scanGotResult) {
+    const codeName = scanMode === "qr" ? "QR" : "バーコード";
     showBarcodeError(
-      "枠内のバーコードを読み取れませんでした。位置・ピント・明るさを調整し、ボタンを押したまま少しかざしてください。",
+      `枠内の${codeName}を読み取れませんでした。位置・ピント・明るさを調整し、ボタンを押したまま少しかざしてください。`,
     );
     statusText.textContent =
       "ガイド枠に合わせて撮影／「バーコード読み取り」で枠内を読み取り";
@@ -279,7 +320,7 @@ function buildInvertedCanvas(sourceCanvas) {
 
 function handleBarcode(result) {
   barcodeResult.classList.remove("is-error");
-  barcodeLabel.textContent = "バーコード読取";
+  barcodeLabel.textContent = scanMode === "qr" ? "QR読取" : "バーコード読取";
   barcodeValue.textContent = result.getText();
   barcodeFormat.textContent =
     ZXing.BarcodeFormat[result.getBarcodeFormat()] || "";
@@ -516,6 +557,7 @@ closeListButton.addEventListener("click", closeListPanel);
 tipsButton.addEventListener("click", openTipsPanel);
 closeTipsButton.addEventListener("click", closeTipsPanel);
 tipsOkButton.addEventListener("click", closeTipsPanel);
+scanModeButton.addEventListener("click", toggleScanMode);
 
 // 押している間だけ連続スキャン。指を離す／外すと停止。
 readBarcodeButton.addEventListener("pointerdown", (event) => {
