@@ -29,9 +29,23 @@ docker run --rm -v "$(pwd)/samples:/data" sn-reader /data/20260701_120000_001.jp
 
 # JSON出力（後段の連携用）
 docker run --rm -v "$(pwd)/samples:/data" sn-reader --json /data/*.jpg
+
+# 対象シンボロジーを指定（既定は CODE128,CODE39）
+docker run --rm -v "$(pwd)/samples:/data" sn-reader --symbols CODE128,CODE39,EAN13 /data/*.jpg
+
+# シンボロジーを制限しない（ITF等の誤読を確認する比較用）
+docker run --rm -v "$(pwd)/samples:/data" sn-reader --all-symbols /data/*.jpg
 ```
 
 > Windows/WSL で `$(pwd)` が効かない場合は絶対パスを指定するか、PowerShell では `${PWD}` を使う。
+
+### 対象シンボロジーの限定（既定で ITF/CODABAR を除外）
+
+pyzbar は既定で **CODE128 / CODE39 のみ**を対象にする（`--symbols` で変更、`--all-symbols` で無制限）。
+これは Webアプリ側の既定（CODABAR・ITF を外す）と揃えたもの。**ITF(Interleaved 2 of 5) は
+数字列の部分一致で誤読しやすく**、実際に Buffalo の S/N ラベルを無制限で解析すると、本来の値
+`10606540522247` ではなく ITF として `40522247`（末尾8桁）を拾う偽陽性が出た（`rect=0x0` の縮退検出）。
+対象を限定することで、こうした「もっともらしい誤った番号」を出さず「検出なし」と正しく報告する。
 
 ### 出力例
 

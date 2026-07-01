@@ -23,10 +23,35 @@ import numpy as np
 
 try:
     from pyzbar.pyzbar import decode as zbar_decode
+    from pyzbar.pyzbar import ZBarSymbol
     HAS_PYZBAR = True
 except Exception as exc:  # pragma: no cover - 環境不備時のガード
     HAS_PYZBAR = False
     _PYZBAR_IMPORT_ERROR = exc
+
+
+# 対象シンボロジー（既定）: CODE39=管理番号, CODE128=Buffalo S/N。
+# CODABAR/ITF(I25) は数字列の部分一致で誤読するため既定で除外（Webアプリと同方針）。
+DEFAULT_SYMBOLS = ("CODE128", "CODE39")
+
+
+def resolve_symbols(names: list[str] | None) -> "list | None":
+    """シンボロジー名リスト → ZBarSymbol リスト。None なら制限なし（全種）。"""
+    if not HAS_PYZBAR or names is None:
+        return None
+    table = {s.name.upper(): s for s in ZBarSymbol}
+    if "I25" in table:  # ITF の別名
+        table["ITF"] = table["I25"]
+    resolved = []
+    for raw in names:
+        key = raw.strip().upper().replace("-", "").replace("_", "")
+        if not key:
+            continue
+        if key not in table:
+            valid = ", ".join(sorted(table))
+            raise SystemExit(f"[エラー] 未知のシンボロジー: {raw}（指定可: {valid}）")
+        resolved.append(table[key])
+    return resolved or None
 
 
 @dataclass
@@ -70,12 +95,12 @@ def build_variants(image_bgr: np.ndarray) -> list[tuple[str, np.ndarray]]:
 
 # --- pyzbar (ZBar) ----------------------------------------------------------
 
-def analyze_pyzbar(image_bgr: np.ndarray) -> list[Detection]:
+def analyze_pyzbar(image_bgr: np.ndarray, symbols: "list | None" = None) -> list[Detection]:
     if not HAS_PYZBAR:
         return []
 
     for variant_name, variant_img in build_variants(image_bgr):
-        results = zbar_decode(variant_img)
+        results = zbar_decode(variant_img, symbols=symbols)
         if results:
             found: list[Detection] = []
             for r in results:
@@ -167,7 +192,7 @@ def _normalize_opencv_output(out) -> tuple[list[str], list[str]]:
     return infos, types
 
 
-def analyze_file(path: str) -> FileResult:
+def analyze_file(path: str, symbols: "list | None" = None) -> FileResult:
     result = FileResult(path=path)
 
     image = cv2.imread(path, cv2.IMREAD_COLOR)
@@ -175,7 +200,7 @@ def analyze_file(path: str) -> FileResult:
         result.error = "画像を読み込めませんでした（パス／形式を確認）"
         return result
 
-    result.detections.extend(analyze_pyzbar(image))
+    result.detections.extend(analyze_pyzbar(image, symbols=symbols))
     result.detections.extend(analyze_opencv(image))
     result.ok = len(result.detections) > 0
     return result
@@ -245,6 +270,16 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("paths", nargs="+", help="画像ファイルのパス（glob可）")
     parser.add_argument("--json", action="store_true", help="結果をJSONで出力")
+    parser.add_argument(
+        "--symbols",
+        default=",".join(DEFAULT_SYMBOLS),
+        help="pyzbarの対象シンボロジー（カンマ区切り, 既定: CODE128,CODE39）",
+    )
+    parser.add_argument(
+        "--all-symbols",
+        action="store_true",
+        help="シンボロジーを制限せず全種で解析（ITF等の誤読確認・比較用）",
+    )
     args = parser.parse_args(argv)
 
     if not HAS_PYZBAR:
@@ -253,7 +288,12 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
 
-    results = [analyze_file(p) for p in expand_paths(args.paths)]
+    symbols = None if args.all_symbols else resolve_symbols(args.symbols.split(","))
+    if not args.json and HAS_PYZBAR:
+        active = "全種（制限なし）" if symbols is None else ", ".join(s.name for s in symbols)
+        print(f"pyzbar 対象シンボロジー: {active}\n")
+
+    results = [analyze_file(p, symbols=symbols) for p in expand_paths(args.paths)]
 
     if args.json:
         print(to_json(results))
