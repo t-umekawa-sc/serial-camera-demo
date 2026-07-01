@@ -1,0 +1,4 @@
+# paddle 2.6.2 は numpy 1.x ABI でビルドされているため 2.x を入れない
+numpy==1.26.4
+paddlepaddle==2.6.2
+paddleocr==2.7.3
