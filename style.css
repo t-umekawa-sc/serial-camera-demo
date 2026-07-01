@@ -364,6 +364,37 @@ button {
   color: #ffffff;
 }
 
+.thumbnail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.save-button,
+.share-button {
+  flex: 1;
+  min-height: 36px;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.save-button {
+  background: #2563eb;
+}
+
+.share-button {
+  background: #059669;
+}
+
+.share-button:disabled {
+  background: #4b5563;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
 .delete-button {
   width: 100%;
   margin-top: 8px;

@@ -819,6 +819,29 @@ function renderThumbnailList() {
     const idText = document.createElement("div");
     idText.textContent = item.id;
 
+    const actions = document.createElement("div");
+    actions.className = "thumbnail-actions";
+
+    const saveButton = document.createElement("button");
+    saveButton.className = "save-button";
+    saveButton.type = "button";
+    saveButton.textContent = "保存";
+    saveButton.addEventListener("click", () => {
+      saveCapturedImage(item);
+    });
+
+    const shareButton = document.createElement("button");
+    shareButton.className = "share-button";
+    shareButton.type = "button";
+    shareButton.textContent = "共有";
+    shareButton.addEventListener("click", () => {
+      shareCapturedImage(item);
+    });
+    if (!canShareFiles()) {
+      shareButton.disabled = true;
+      shareButton.title = "この端末は共有に未対応です";
+    }
+
     const deleteButton = document.createElement("button");
     deleteButton.className = "delete-button";
     deleteButton.type = "button";
@@ -827,9 +850,13 @@ function renderThumbnailList() {
       deleteCapturedImage(item.id);
     });
 
+    actions.appendChild(saveButton);
+    actions.appendChild(shareButton);
+
     info.appendChild(title);
     info.appendChild(dateText);
     info.appendChild(idText);
+    info.appendChild(actions);
     info.appendChild(deleteButton);
 
     card.appendChild(img);
@@ -837,6 +864,50 @@ function renderThumbnailList() {
 
     thumbnailList.appendChild(card);
   });
+}
+
+function canShareFiles() {
+  return (
+    typeof navigator.canShare === "function" &&
+    typeof navigator.share === "function" &&
+    navigator.canShare({
+      files: [new File([new Blob()], "probe.jpg", { type: "image/jpeg" })],
+    })
+  );
+}
+
+// 枠内だけ切り出し済みのJPEGを端末に保存（Android Chrome等で確実）
+function saveCapturedImage(item) {
+  const link = document.createElement("a");
+  link.href = item.imageUrl;
+  link.download = `${item.id}.jpg`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// 共有シートを開き、保存を挟まずTeams等へ直接送る（iOS Safari向けの本命）
+async function shareCapturedImage(item) {
+  const file = new File([item.blob], `${item.id}.jpg`, { type: "image/jpeg" });
+
+  if (!canShareFiles()) {
+    saveCapturedImage(item);
+    return;
+  }
+
+  try {
+    await navigator.share({
+      files: [file],
+      title: item.id,
+      text: `製造番号デモ画像 ${item.id}`,
+    });
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      return; // ユーザーが共有をキャンセル
+    }
+    console.error("共有に失敗しました", error);
+    saveCapturedImage(item);
+  }
 }
 
 function deleteCapturedImage(id) {
