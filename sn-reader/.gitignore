@@ -1,0 +1,5 @@
+# 実サンプル画像は実S/Nを含むためコミットしない
+samples/*
+!samples/.gitkeep
+__pycache__/
+*.pyc

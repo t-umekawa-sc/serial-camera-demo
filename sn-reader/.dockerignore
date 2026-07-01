@@ -1,0 +1,4 @@
+samples/
+*.md
+__pycache__/
+*.pyc
