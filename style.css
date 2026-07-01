@@ -150,9 +150,34 @@ button {
   white-space: nowrap;
 }
 
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 #captureCount {
   flex-shrink: 0;
   font-weight: 700;
+}
+
+/* 現在有効な読取エンジンを常時表示するバッジ。 */
+.engine-indicator {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  white-space: nowrap;
+}
+
+.engine-indicator.is-native {
+  background: rgba(22, 163, 74, 0.9);
+}
+
+.engine-indicator.is-zxing {
+  background: rgba(107, 114, 128, 0.85);
 }
 
 .barcode-result {
@@ -191,6 +216,20 @@ button {
   font-size: 12px;
   opacity: 0.85;
   flex-shrink: 0;
+}
+
+/* 実際に読み取ったエンジン（ネイティブ/ZXing）を示すバナー内のタグ。 */
+.barcode-engine {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.barcode-engine:empty {
+  display: none;
 }
 
 .barcode-result.is-error {

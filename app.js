@@ -23,6 +23,8 @@ const formatPanel = document.getElementById("formatPanel");
 const closeFormatButton = document.getElementById("closeFormatButton");
 const formatOptions = document.getElementById("formatOptions");
 const focusRing = document.getElementById("focusRing");
+const engineIndicator = document.getElementById("engineIndicator");
+const barcodeEngine = document.getElementById("barcodeEngine");
 
 let capturedImages = [];
 let stream = null;
@@ -63,6 +65,27 @@ const QR_FORMATS = [
   ZXing.BarcodeFormat.AZTEC,
   ZXing.BarcodeFormat.PDF_417,
 ];
+
+// --- BarcodeDetector（ネイティブ実装）連携 ---
+// Android Chrome では OS の ML Kit（標準スキャナと同じエンジン）に繋がり、
+// 純JS の ZXing より密な CODE 128 等の読取精度が高い。対応端末では優先し、
+// 未対応（iOS Safari 等）や未検出時は既存の ZXing 経路にフォールバックする。
+let detectorSupportedFormats = new Set();
+let barcodeDetector = null;
+
+// 各対象フォーマットに対応する BarcodeDetector のフォーマット名。
+const BD_FORMAT_BY_KEY = {
+  CODE_128: "code_128",
+  CODE_39: "code_39",
+  CODE_93: "code_93",
+  CODABAR: "codabar",
+  ITF: "itf",
+  EAN_13: "ean_13",
+  EAN_8: "ean_8",
+  UPC_A: "upc_a",
+  UPC_E: "upc_e",
+};
+const BD_QR_FORMATS = ["qr_code", "data_matrix", "aztec", "pdf417"];
 
 // バーコードモードで有効なフォーマット（キーの集合）。localStorageに保持。
 const BARCODE_FORMAT_STORAGE_KEY = "scanBarcodeFormats";
@@ -129,6 +152,81 @@ function applyScanFormats() {
   hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
   scanHints = hints;
   barcodeReader.setHints(hints);
+
+  // ZXing と同じ対象フォーマットで BarcodeDetector も作り直す。
+  rebuildBarcodeDetector();
+}
+
+// 現在のモードと選択に対応する BarcodeDetector のフォーマット名一覧を返す。
+// 端末が対応していないフォーマットは除外する。
+function activeDetectorFormats() {
+  if (scanMode === "qr") {
+    return BD_QR_FORMATS.filter((f) => detectorSupportedFormats.has(f));
+  }
+  const enabled = BARCODE_FORMAT_OPTIONS.filter((o) =>
+    enabledBarcodeKeys.has(o.key),
+  );
+  const keys = (enabled.length ? enabled : BARCODE_FORMAT_OPTIONS).map(
+    (o) => o.key,
+  );
+  return keys
+    .map((k) => BD_FORMAT_BY_KEY[k])
+    .filter((f) => f && detectorSupportedFormats.has(f));
+}
+
+// 現在の対象フォーマットで BarcodeDetector を作り直す。
+// 未対応端末や対応フォーマットが無い場合は null にして ZXing のみで動かす。
+function rebuildBarcodeDetector() {
+  barcodeDetector = null;
+  if (!("BarcodeDetector" in window) || detectorSupportedFormats.size === 0) {
+    return;
+  }
+  const formats = activeDetectorFormats();
+  if (!formats.length) {
+    return;
+  }
+  try {
+    barcodeDetector = new window.BarcodeDetector({ formats });
+  } catch (error) {
+    // 生成に失敗した端末では ZXing にフォールバック。
+    barcodeDetector = null;
+  }
+  updateEngineIndicator();
+}
+
+// エンジン種別（"native" | "zxing"）を日本語表示に変換する。
+function engineLabel(engine) {
+  return engine === "native" ? "ネイティブ" : "ZXing";
+}
+
+// いま有効な読取エンジンを常時表示のバッジに反映する。
+// BarcodeDetector が使える状態なら「ネイティブ」、そうでなければ「ZXing」。
+function updateEngineIndicator() {
+  if (!engineIndicator) {
+    return;
+  }
+  const isNative = barcodeDetector != null;
+  engineIndicator.textContent = isNative
+    ? "読取エンジン：ネイティブ(高精度)"
+    : "読取エンジン：ZXing";
+  engineIndicator.classList.toggle("is-native", isNative);
+  engineIndicator.classList.toggle("is-zxing", !isNative);
+}
+
+// 端末が BarcodeDetector に対応していれば、対応フォーマットを取得して有効化する。
+async function initBarcodeDetector() {
+  if (!("BarcodeDetector" in window)) {
+    return;
+  }
+  try {
+    const supported = await window.BarcodeDetector.getSupportedFormats();
+    detectorSupportedFormats = new Set(supported);
+    rebuildBarcodeDetector();
+  } catch (error) {
+    detectorSupportedFormats = new Set();
+    barcodeDetector = null;
+    updateEngineIndicator();
+  }
 }
 
 applyScanFormats();
@@ -410,59 +508,99 @@ function stopHoldScan() {
   }
 }
 
-function scanGuideArea() {
-  if (scanGotResult || !video.videoWidth || !video.videoHeight) {
+// BarcodeDetector.detect() は非同期のため、200ms間隔の呼び出しが前の解析と
+// 重ならないように再入を防ぐフラグ。
+let scanBusy = false;
+
+async function scanGuideArea() {
+  if (scanGotResult || scanBusy || !video.videoWidth || !video.videoHeight) {
     return;
   }
+  scanBusy = true;
+  try {
+    // ガイド枠内だけを切り出す。
+    const rect = getGuideSourceRect();
+    scanCanvas.width = Math.round(rect.width);
+    scanCanvas.height = Math.round(rect.height);
+    scanCtx.drawImage(
+      video,
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height,
+      0,
+      0,
+      scanCanvas.width,
+      scanCanvas.height,
+    );
 
-  // ガイド枠内だけを切り出す。
-  const rect = getGuideSourceRect();
-  scanCanvas.width = Math.round(rect.width);
-  scanCanvas.height = Math.round(rect.height);
-  scanCtx.drawImage(
-    video,
-    rect.x,
-    rect.y,
-    rect.width,
-    rect.height,
-    0,
-    0,
-    scanCanvas.width,
-    scanCanvas.height,
-  );
+    // 対応端末ではまずネイティブの BarcodeDetector で素の画像を解析（高精度）。
+    let result = barcodeDetector
+      ? await detectWithBarcodeDetector(scanCanvas)
+      : null;
 
-  // 素 → 影補正 → 反転（ネガ）の順に、読めるまで試す。
-  let result = tryDecode(scanCanvas);
-  if (!result) {
-    const corrected = buildShadowCorrectedCanvas();
-    if (corrected) {
-      result = tryDecode(corrected);
+    // 未対応・未検出なら ZXing で 素 → 影補正 → 反転（ネガ）の順に試す。
+    if (!result) {
+      result = tryDecode(scanCanvas);
     }
     if (!result) {
-      // 黒地に白バー等の反転印字に備えて、ネガ画像でも試す。
-      const inverted = buildInvertedCanvas(corrected || scanCanvas);
-      if (inverted) {
-        result = tryDecode(inverted);
+      const corrected = buildShadowCorrectedCanvas();
+      if (corrected) {
+        result = tryDecode(corrected);
+      }
+      if (!result) {
+        // 黒地に白バー等の反転印字に備えて、ネガ画像でも試す。
+        const inverted = buildInvertedCanvas(corrected || scanCanvas);
+        if (inverted) {
+          result = tryDecode(inverted);
+        }
       }
     }
-  }
 
-  if (result) {
-    // 読めたら成功として連続試行を止める。
-    scanGotResult = true;
-    handleBarcode(result);
-    statusText.textContent = "読み取りました。";
-    stopHoldScan();
+    // await 中に指を離した（scanTimer=null）／既に成功した場合は採用しない。
+    if (result && scanTimer && !scanGotResult) {
+      scanGotResult = true;
+      handleBarcode(result);
+      statusText.textContent = "読み取りました。";
+      stopHoldScan();
+    }
+  } finally {
+    scanBusy = false;
   }
 }
 
+// BarcodeDetector で1枚のキャンバスを解析する。未検出・失敗なら null。
+// 戻り値は ZXing 経路と共通の { text, format } 形式に正規化する。
+async function detectWithBarcodeDetector(canvas) {
+  try {
+    const codes = await barcodeDetector.detect(canvas);
+    if (codes && codes.length) {
+      const code = codes[0];
+      return {
+        text: code.rawValue,
+        format: (code.format || "").toUpperCase(),
+        engine: "native",
+      };
+    }
+  } catch (error) {
+    // detect 失敗時は ZXing にフォールバックさせる。
+  }
+  return null;
+}
+
 // 1枚のキャンバスをZXingで解析する。未検出なら null。
+// 戻り値は BarcodeDetector 経路と共通の { text, format } 形式に正規化する。
 function tryDecode(canvas) {
   try {
     const luminance = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
     const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
     // ヒントを毎回渡してモードのフォーマット制限を効かせる（QR混入防止）。
-    return barcodeReader.decode(bitmap, scanHints);
+    const result = barcodeReader.decode(bitmap, scanHints);
+    return {
+      text: result.getText(),
+      format: ZXing.BarcodeFormat[result.getBarcodeFormat()] || "",
+      engine: "zxing",
+    };
   } catch (error) {
     return null;
   } finally {
@@ -544,9 +682,12 @@ function buildInvertedCanvas(sourceCanvas) {
 function handleBarcode(result) {
   barcodeResult.classList.remove("is-error");
   barcodeLabel.textContent = scanMode === "qr" ? "QR読取" : "バーコード読取";
-  barcodeValue.textContent = result.getText();
-  barcodeFormat.textContent =
-    ZXing.BarcodeFormat[result.getBarcodeFormat()] || "";
+  barcodeValue.textContent = result.text;
+  barcodeFormat.textContent = result.format || "";
+  // 実際にこの結果を読み取ったエンジンを表示する。
+  if (barcodeEngine) {
+    barcodeEngine.textContent = result.engine ? engineLabel(result.engine) : "";
+  }
   barcodeResult.classList.remove("hidden");
 
   if (navigator.vibrate) {
@@ -801,4 +942,5 @@ readBarcodeButton.addEventListener("contextmenu", (event) =>
 
 updateCaptureCount();
 openTipsPanel();
+initBarcodeDetector();
 startCamera();
