@@ -137,22 +137,37 @@ python -m http.server 8000
 
 ## 次回の再開ポイント（続きから始めるために）
 
-> **⏸️ 保留中**: 再開ポイント#1（鮮明サンプルの取得）が撮り直し不可のため停止。サンプルが用意でき次第 #2 から再開する。
+**直近の到達点**: **OCRデモ `ocr-reader/`（PaddleOCR）を新規追加**（コミット `590e4eb`、push 済み）。バーコードで読めなかった S/N `10606540522247` を、切り出し画像から **信頼度1.00で正読**。バーコード（`sn-reader`）とOCRが相補的であることを実証。全体写真は精度が低く、ガイド枠切り出し領域の入力で精度が上がる。`sn-reader` は ITF誤読対策済み（`12521f4`）。
 
-**直近の到達点**: `sn-reader` を **pyzbar の対象シンボロジー限定（既定 CODE128/CODE39、`--symbols`/`--all-symbols`）** に改修（ITF誤読対策）。元写真（画面再撮影でない 2000×1500）から S/N を切り出して再検証したが、**解像度・鮮鋭度不足でデコード不可**を確認。CLIパイプラインは正常。
+**手元の資産（すぐ使える）**:
+- `sn-reader/`（pyzbar, `docker build -t sn-reader .`）／`ocr-reader/`（PaddleOCR, `docker build -t ocr-reader .`）とも**ビルド済みイメージあり**（消えていれば再ビルド）
+- 切り出しサンプル `sn-reader/samples/sn_buffalo_hd-le2u3_v1.jpg`、実ラベル全景 `samples/shared image (1),(2).jpg`（いずれも git 除外）
 
-**次にやること（優先順）**:
+**次にやること（候補）**:
 
-1. **鮮明な S/N サンプルの取得**（最重要・未解決の律速）: これまでの実画像（screen再撮影・元写真とも）は撮影品質で読めなかった。現物ラベルにピントを合わせて**接写**し、バーコード全体＋左右余白を枠内に収めて撮り直す（写真内でバーコード幅 **1000px以上**が目安）。Webアプリの「保存/共有」→ Teams → PC → `sn-reader/samples/` に配置
-2. **撮り直したサンプルで再検証**: `cd sn-reader && docker build -t sn-reader . && docker run --rm -v "$(pwd)/samples:/data" sn-reader /data/*.jpg`。pyzbar で `10606540522247` が **CODE128** として読めるか確認（ITF `40522247` は誤読なので出たら要注意）
-3. 読取が安定したら → **サーバ側OCR（PaddleOCR）連携** と **Webアプリからの実アップロード** の設計へ
+1. **サーバ側の読取パイプライン設計**（本命の前進先）: 「pyzbar（バーコード）＋PaddleOCR（印字文字）を併用し、どちらかで製造番号を確定」する構成をサーバ側に展開。入力は**Webアプリのガイド枠で切り出した領域**（全体写真は不可）
+2. **Webアプリ→読取の連携**: Webの「保存/共有」で得た切り出しJPEGを sn-reader/ocr-reader に流す導線、または実アップロード（現状ダミー）の実装
+3. **OCRの精度詰め**（任意）: `Made in Japan`→`Jaban` 等の軽微な誤読。前処理（二値化・拡大）や rec モデル差し替えの検討。S/N候補抽出ヒューリスティックの調整（`ocr.py` の `extract_sn_candidates`）
+4. **（保留）バーコード S/N の再検証**: 鮮明な接写サンプル（写真内でバーコード幅 **1000px以上**目安）が撮れたら `sn-reader/samples/` に置き `docker run --rm -v "$(pwd)/samples:/data" sn-reader /data/*.jpg` で `10606540522247` が **CODE128** として読めるか確認（ITF `40522247` は誤読なので出たら要注意）。※撮り直し不可のため現在保留
 
-**参考ツール**: 元写真からの切り出しは `C:\Users\t-umekawa\Downloads\crop_sn.ps1` / `crop_scale.ps1`（PowerShell + System.Drawing）を使用（ホストに画像ライブラリ無し・切り出しのみ）。デコード検証は Docker（要 Docker Desktop 起動＋WSL統合）
+**実行コマンド早見**:
+```bash
+# OCR（切り出し領域を入力にするのが肝）
+cd ocr-reader && docker build -t ocr-reader .
+docker run --rm -v "$(pwd)/../sn-reader/samples:/data" ocr-reader /data/sn_buffalo_hd-le2u3_v1.jpg
+# バーコード
+cd sn-reader && docker build -t sn-reader .
+docker run --rm -v "$(pwd)/samples:/data" sn-reader /data/*.jpg
+```
+
+**参考ツール**: 元写真からの切り出しは `C:\Users\t-umekawa\Downloads\crop_sn.ps1` / `crop_scale.ps1`（PowerShell + System.Drawing。ホストに画像ライブラリ無し・切り出しのみ）。デコード/OCR検証は Docker（要 Docker Desktop 起動＋WSL統合）
 
 **判断済み事項**:
-- 読取エンジンは **pyzbar(ZBar) を軸**にする（OpenCV BarcodeDetector は CODE 39/128 に不向き）
-- 対象シンボロジーは **CODE 39（管理番号）と CODE 128（Buffalo S/N）**（CODABAR・ITF は誤読源のため既定で除外）。`sn-reader` も pyzbar を既定でこの2種に限定（ITF `40522247` の誤読を実際に確認済み）
+- 製造番号の取得は **pyzbar（バーコード）＋PaddleOCR（OCR）の併用**。OCRは数字主体のS/Nに強く、バーコード不可の画像でも読める
+- OCR/バーコードとも **ガイド枠で切り出した領域を入力**にする（全体写真は精度が出ない）
+- バーコードエンジンは **pyzbar 軸**（OpenCV BarcodeDetector は CODE 39/128 に不向き）。対象シンボロジーは **CODE 39（管理番号）と CODE 128（Buffalo S/N）**、CODABAR・ITF は誤読源のため `sn-reader` 既定で除外（ITF `40522247` 誤読を確認済み）
+- OCRエンジンは **PaddleOCR（lang=japan）**。Docker化の落とし穴（numpy ABI／一括installでの.so破損／paddle import状態でのtar展開segfault）は `ocr-reader/Dockerfile`・`fetch_models.py` で対処済み＝**実行時ネットワーク不要**
 
-**環境メモ**: Docker 利用可（`docker --version` 確認済み）。`gh` は未認証のため Pages のデプロイ状況はブラウザ（Actions / Settings→Pages）で確認する。実サンプルは実S/Nを含むため `samples/` は git 除外（ルートと `sn-reader/` 双方に `.gitignore`）
+**環境メモ**: Docker 利用可（Docker Desktop 起動＋WSL統合で `docker` がWSLから使える）。`gh` は未認証のため Pages のデプロイ状況はブラウザ（Actions / Settings→Pages）で確認する。実サンプルは実S/Nを含むため `samples/`（ルート）と `sn-reader/samples/` は git 除外
 </content>
 </invoke>
